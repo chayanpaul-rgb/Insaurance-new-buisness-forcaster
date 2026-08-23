@@ -30,7 +30,7 @@ with tab1:
     fig.add_trace(go.Scatter(x=monthly.index, y=monthly["Total_Premium"],
                               mode="lines", name="Actual", line=dict(color="#1f77b4")))
     fig.add_trace(go.Scatter(x=p_pred.index, y=p_pred.values,
-                              mode="lines", name="Forecast", line=dict(color="#ff7f0e", dash="dash")))
+                              mode="lines", name="Forecast", line=dict(color="#ff7f0e")))
     fig.update_layout(xaxis_title="Month", yaxis_title="Total Premium", height=450)
     st.plotly_chart(fig, use_container_width=True)
 
@@ -40,7 +40,7 @@ with tab2:
     fig2.add_trace(go.Scatter(x=monthly.index, y=monthly["Total_Policies"],
                                mode="lines", name="Actual", line=dict(color="#1f77b4")))
     fig2.add_trace(go.Scatter(x=q_pred.index, y=q_pred.values,
-                               mode="lines", name="Forecast", line=dict(color="#ff7f0e", dash="dash")))
+                               mode="lines", name="Forecast", line=dict(color="#ff7f0e")))
     fig2.update_layout(xaxis_title="Month", yaxis_title="Total Policies", height=450)
     st.plotly_chart(fig2, use_container_width=True)
 
