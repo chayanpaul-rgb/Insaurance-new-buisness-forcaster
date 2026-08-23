@@ -11,7 +11,7 @@ from xgboost import XGBRegressor
 warnings.filterwarnings("ignore")
 logging.getLogger("cmdstanpy").disabled = True
 
-
+#Load the data from the table.
 @st.cache_data
 def load_data():
     df = pd.read_csv("master_sales_data.csv")
@@ -26,7 +26,7 @@ def load_data():
     df = df.dropna(subset=["Total_Premium", "Total_Policies"])
     return df
 
-
+#calculate all the model metrices
 def compute_metrics(actual, pred):
     actual = np.array(actual)
     pred = np.array(pred)
@@ -37,7 +37,7 @@ def compute_metrics(actual, pred):
     bias = np.sum(pred - actual) / denom * 100 if denom else np.nan
     return {"MAE": mae, "RMSE": rmse, "WAPE": wape, "Bias": bias}
 
-
+#Train SARIMA
 def run_sarima(train, steps, seasonal):
     order = (1, 1, 1)
     seasonal_order = (1, 1, 1, 12) if seasonal else (0, 0, 0, 0)
@@ -47,7 +47,7 @@ def run_sarima(train, steps, seasonal):
     pred[pred < 0] = 0
     return pred
 
-
+#Train PROPHET
 def run_prophet(train, steps):
     dfp = train.reset_index()
     dfp.columns = ["ds", "y"]
@@ -59,7 +59,7 @@ def run_prophet(train, steps):
     pred[pred < 0] = 0
     return pred
 
-
+#Train XGBOOST
 def make_lag_features(series):
     data = series.to_frame(name="y")
     data["month"] = data.index.month
@@ -93,7 +93,7 @@ def run_xgboost(train, steps):
     pred[pred < 0] = 0
     return pred
 
-
+#compare all the model 
 def best_forecast(series, horizon):
     seasonal_ok = len(series) >= 24 and series.tail(24).sum() > 0
 
@@ -133,7 +133,7 @@ def best_forecast(series, horizon):
 
     return final, best_name, results
 
-
+#Show the best model result
 @st.cache_data(show_spinner="Fitting SARIMA, Prophet and XGBoost...")
 def get_forecast(df, insurer, category, horizon):
     data = df.copy()
