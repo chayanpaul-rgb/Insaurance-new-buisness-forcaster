@@ -6,12 +6,11 @@ import pandas as pd
 import streamlit as st
 from prophet import Prophet
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from xgboost import XGBRegressor
 
 warnings.filterwarnings("ignore")
 logging.getLogger("cmdstanpy").disabled = True
 
-#Load the data from the table.
+
 @st.cache_data
 def load_data():
     df = pd.read_csv("master_sales_data.csv")
@@ -26,7 +25,7 @@ def load_data():
     df = df.dropna(subset=["Total_Premium", "Total_Policies"])
     return df
 
-#calculate all the model metrices
+
 def compute_metrics(actual, pred):
     actual = np.array(actual)
     pred = np.array(pred)
@@ -37,7 +36,7 @@ def compute_metrics(actual, pred):
     bias = np.sum(pred - actual) / denom * 100 if denom else np.nan
     return {"MAE": mae, "RMSE": rmse, "WAPE": wape, "Bias": bias}
 
-#Train SARIMA
+
 def run_sarima(train, steps, seasonal):
     order = (1, 1, 1)
     seasonal_order = (1, 1, 1, 12) if seasonal else (0, 0, 0, 0)
@@ -47,7 +46,7 @@ def run_sarima(train, steps, seasonal):
     pred[pred < 0] = 0
     return pred
 
-#Train PROPHET
+
 def run_prophet(train, steps):
     dfp = train.reset_index()
     dfp.columns = ["ds", "y"]
@@ -59,41 +58,7 @@ def run_prophet(train, steps):
     pred[pred < 0] = 0
     return pred
 
-#Train XGBOOST
-def make_lag_features(series):
-    data = series.to_frame(name="y")
-    data["month"] = data.index.month
-    for lag in [1, 2, 3, 12]:
-        data[f"lag_{lag}"] = data["y"].shift(lag)
-    return data.dropna()
 
-
-def run_xgboost(train, steps):
-    feature_cols = ["month", "lag_1", "lag_2", "lag_3", "lag_12"]
-    feat = make_lag_features(train)
-    model = XGBRegressor(n_estimators=200, max_depth=3, learning_rate=0.1, verbosity=0)
-    model.fit(feat[feature_cols], feat["y"])
-
-    history = train.copy()
-    preds = []
-    for _ in range(steps):
-        next_date = history.index[-1] + pd.DateOffset(months=1)
-        row = pd.DataFrame([{
-            "month": next_date.month,
-            "lag_1": history.iloc[-1],
-            "lag_2": history.iloc[-2],
-            "lag_3": history.iloc[-3],
-            "lag_12": history.iloc[-12],
-        }])[feature_cols]
-        pred_val = model.predict(row)[0]
-        preds.append(pred_val)
-        history.loc[next_date] = pred_val
-
-    pred = pd.Series(preds, index=history.index[-steps:])
-    pred[pred < 0] = 0
-    return pred
-
-#compare all the model 
 def best_forecast(series, horizon):
     seasonal_ok = len(series) >= 24 and series.tail(24).sum() > 0
 
@@ -115,26 +80,19 @@ def best_forecast(series, horizon):
         results["Prophet"] = compute_metrics(test, pred)
     except Exception:
         results["Prophet"] = None
-    try:
-        pred = run_xgboost(train, test_size)
-        results["XGBoost"] = compute_metrics(test, pred)
-    except Exception:
-        results["XGBoost"] = None
 
     valid = {k: v for k, v in results.items() if v and not np.isnan(v["WAPE"])}
     best_name = min(valid, key=lambda k: valid[k]["WAPE"]) if valid else "SARIMA"
 
     if best_name == "Prophet":
         final = run_prophet(series, horizon)
-    elif best_name == "XGBoost":
-        final = run_xgboost(series, horizon)
     else:
         final = run_sarima(series, horizon, seasonal_ok)
 
     return final, best_name, results
 
-#Show the best model result
-@st.cache_data(show_spinner="Fitting SARIMA, Prophet and XGBoost...")
+
+@st.cache_data(show_spinner="Fitting SARIMA and Prophet...")
 def get_forecast(df, insurer, category, horizon):
     data = df.copy()
     if insurer != "All":
