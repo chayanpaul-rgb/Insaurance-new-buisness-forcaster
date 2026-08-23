@@ -9,7 +9,6 @@ st.set_page_config(page_title="Life Insurance Sales Forecast", layout="wide")
 df = fc.load_data()
 
 st.title("Life Insurance New Business - Sales Analysis and Forecasting")
-st.write("Historical new business data with SARIMA / Prophet / XGBoost forecast, best model picked by backtest WAPE.")
 
 insurers = ["All"] + sorted(df["Insurer"].unique().tolist())
 categories = ["All"] + sorted(df["Category"].unique().tolist())
@@ -53,7 +52,7 @@ table = pd.DataFrame({
 })
 st.dataframe(table, use_container_width=True, hide_index=True)
 
-st.subheader("Model Comparison (backtest on holdout months)")
+st.subheader("Model Comparison")
 
 
 def metrics_table(metrics_dict):
