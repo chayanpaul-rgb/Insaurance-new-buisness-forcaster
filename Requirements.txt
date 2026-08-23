@@ -3,5 +3,4 @@ pandas
 plotly
 statsmodels
 prophet
-xgboost
 openpyxl
