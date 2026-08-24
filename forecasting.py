@@ -21,7 +21,7 @@ def load_data():
         "Premium_Current_Month": "Total_Premium",
         "Policies_Current_Month": "Total_Policies",
     })
-    df = df[df["Category"] != "Total"]  # this row is just a rollup of the other categories
+    df = df[df["Category"] != "Total"]  
     df = df.dropna(subset=["Total_Premium", "Total_Policies"])
     return df
 
@@ -79,6 +79,27 @@ def run_prophet(train, steps):
     return pred, lower, upper
 
 
+def run_seasonal_naive(train, steps, season_length=12):
+   
+    if len(train) < season_length:
+        raise ValueError("Need at least 12 months for Seasonal Naive.")
+
+    last_season = train.iloc[-season_length:].values
+
+    pred = np.tile(
+        last_season,
+        int(np.ceil(steps / season_length))
+    )[:steps]
+
+    return pd.Series(
+        pred,
+        index=pd.date_range(
+            start=train.index[-1] + pd.offsets.MonthBegin(1),
+            periods=steps,
+            freq="MS"
+        )
+    )
+
 def best_forecast(series, horizon):
     seasonal_ok = len(series) >= 24 and series.tail(24).sum() > 0
 
@@ -90,6 +111,13 @@ def best_forecast(series, horizon):
     train, test = series.iloc[:-test_size], series.iloc[-test_size:]
 
     results = {}
+
+    try:
+        pred = run_seasonal_naive(train, test_size, 12)
+        results["Seasonal Naive"] = compute_metrics(test, pred)
+    except Exception:
+        results["Seasonal Naive"] = None
+
     try:
         pred, _, _ = run_sarima(train, test_size, seasonal_ok)
         results["SARIMA"] = compute_metrics(test, pred)
@@ -101,7 +129,10 @@ def best_forecast(series, horizon):
     except Exception:
         results["Prophet"] = None
 
-    valid = {k: v for k, v in results.items() if v and not np.isnan(v["WAPE"])}
+    valid = {
+        k: v for k, v in results.items()
+        if k in ("SARIMA", "Prophet") and v and not np.isnan(v["WAPE"])
+    }
     best_name = min(valid, key=lambda k: valid[k]["WAPE"]) if valid else "SARIMA"
 
     if best_name == "Prophet":
