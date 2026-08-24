@@ -38,25 +38,45 @@ def compute_metrics(actual, pred):
 
 
 def run_sarima(train, steps, seasonal):
+
     order = (1, 1, 1)
     seasonal_order = (1, 1, 1, 12) if seasonal else (0, 0, 0, 0)
-    fit = SARIMAX(train, order=order, seasonal_order=seasonal_order,
-                  enforce_stationarity=False, enforce_invertibility=False).fit(disp=False)
-    pred = fit.forecast(steps)
+
+    fit = SARIMAX(train, order=order, seasonal_order=seasonal_order, enforce_stationarity=False, enforce_invertibility=False).fit(disp=False)
+    result = fit.get_forecast(steps=steps)
+    pred = result.predicted_mean
+    conf = result.conf_int(alpha=0.05)
+
+    lower = conf.iloc[:, 0]
+    upper = conf.iloc[:, 1]
+
     pred[pred < 0] = 0
-    return pred
+    lower[lower < 0] = 0
+    upper[upper < 0] = 0
+
+    return pred, lower, upper
 
 
 def run_prophet(train, steps):
+
     dfp = train.reset_index()
     dfp.columns = ["ds", "y"]
+
     m = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
     m.fit(dfp)
     future = m.make_future_dataframe(periods=steps, freq="MS")
     fc = m.predict(future)
-    pred = fc.set_index("ds")["yhat"].iloc[-steps:]
+    fc = fc.set_index("ds").iloc[-steps:]
+
+    pred = fc["yhat"]
+    lower = fc["yhat_lower"]
+    upper = fc["yhat_upper"]
+
     pred[pred < 0] = 0
-    return pred
+    lower[lower < 0] = 0
+    upper[upper < 0] = 0
+
+    return pred, lower, upper
 
 
 def best_forecast(series, horizon):
@@ -71,12 +91,12 @@ def best_forecast(series, horizon):
 
     results = {}
     try:
-        pred = run_sarima(train, test_size, seasonal_ok)
+        pred, _, _ = run_sarima(train, test_size, seasonal_ok)
         results["SARIMA"] = compute_metrics(test, pred)
     except Exception:
         results["SARIMA"] = None
     try:
-        pred = run_prophet(train, test_size)
+        pred, _, _ = run_prophet(train, test_size)
         results["Prophet"] = compute_metrics(test, pred)
     except Exception:
         results["Prophet"] = None
@@ -85,11 +105,11 @@ def best_forecast(series, horizon):
     best_name = min(valid, key=lambda k: valid[k]["WAPE"]) if valid else "SARIMA"
 
     if best_name == "Prophet":
-        final = run_prophet(series, horizon)
+        final, lower, upper = run_prophet(series, horizon)
     else:
-        final = run_sarima(series, horizon, seasonal_ok)
+        final, lower, upper = run_sarima(series, horizon, seasonal_ok)
 
-    return final, best_name, results
+    return final, lower, upper, best_name, results
 
 
 @st.cache_data(show_spinner="Fitting SARIMA and Prophet...")
@@ -103,7 +123,7 @@ def get_forecast(df, insurer, category, horizon):
     monthly = data.groupby("Date")[["Total_Premium", "Total_Policies"]].sum()
     monthly = monthly.sort_index().asfreq("MS").fillna(0)
 
-    p_pred, p_best, p_metrics = best_forecast(monthly["Total_Premium"], horizon)
-    q_pred, q_best, q_metrics = best_forecast(monthly["Total_Policies"], horizon)
+    p_pred, p_lower, p_upper, p_best, p_metrics = best_forecast(monthly["Total_Premium"], horizon)
+    q_pred, q_lower, q_upper, q_best, q_metrics = best_forecast(monthly["Total_Policies"], horizon)
 
-    return monthly, p_pred, p_best, p_metrics, q_pred, q_best, q_metrics
+    return (monthly, p_pred, p_lower, p_upper, p_best, p_metrics, q_pred, q_lower, q_upper, q_best, q_metrics)
